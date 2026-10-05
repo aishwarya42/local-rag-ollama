@@ -1,154 +1,126 @@
-# local-rag-ollama
-# RAG Document Summariser
+# Local RAG Document Summariser (Streamlit + Ollama)
 
-Summarise PDF, DOCX and TXT documents using Retrieval-Augmented Generation (RAG). The project offers four ways to run it, from a hosted API to a fully offline setup:
-
-| Entry point | Interface | Models run | Needs internet / token |
-|---|---|---|---|
-| `app.py` | Streamlit web app | Hugging Face Inference API | Yes, HF token |
-| `app_ollama.py` | Streamlit web app | Local, through [Ollama](https://ollama.com) | No |
-| `ollama_rag.py` | Command line | Local, through Ollama | No |
-| `local-rag.py` | Script | Local, through Hugging Face `transformers` | Only to download models |
+A web app that summarises PDF, DOCX and TXT documents using Retrieval-Augmented Generation (RAG). Everything runs on your own machine through [Ollama](https://ollama.com), so there are no API keys, no usage credits, and your documents never leave your computer.
 
 ## Features
 
-- Upload **PDF, DOCX or TXT** files (Streamlit apps) or pass a file path (command-line scripts)
-- **Focused summaries**: ask about a topic, retrieve the most relevant chunks, and summarise them with `[chunk N]` citations
-- **Whole-document summaries**: summarise a document too long for one prompt
-  - *Map-reduce*: summarise sections, then merge the summaries in groups
-  - *RAG themes* (`ollama_rag.py`, default): cluster chunk embeddings into themes, retrieve the most representative chunks per theme, and summarise those
-- Adjustable chunk size, overlap and number of retrieved chunks
-- Search with plain NumPy, with no FAISS in the local scripts
+- **Upload** a PDF, DOCX or TXT file in the browser
+- **Whole-document summary**: summarises the document section by section, then merges the section summaries into one overview with key points
+- **Focused summary**: type a topic or question, and the app retrieves the most relevant chunks and summarises only those, with `[chunk N]` citations and a viewer for the source text
+- **Model picker**: chat and embedding models are read from your Ollama install, with no model names to type
+- **Adjustable settings**: chunk size, overlap and number of retrieved chunks
+- **Download** the final summary as a `.txt` file
+- **Private by design**: all processing is local
 
 ## How it works
 
 ```text
-Document -> extract text -> split into overlapping chunks -> embed each chunk
+Upload -> extract text -> split into overlapping chunks -> embed each chunk (Ollama)
                                                                    |
-        question ------------------------------------> embed -> find nearest chunks
+ topic ------------------------------------> embed -> nearest chunks (cosine similarity)
                                                                    |
-                                          chunks + instructions -> language model -> summary
+                                   chunks + instructions -> chat model (Ollama) -> summary
 ```
 
-1. **Extract** text with `pypdf` or `python-docx`.
-2. **Chunk** the text into overlapping pieces so ideas that cross a boundary are kept together.
-3. **Embed** each chunk into a vector with an embedding model. Similar meanings give similar vectors.
-4. **Retrieve** the chunks closest to your topic by cosine similarity (or, for whole-document RAG mode, the chunks closest to each theme).
-5. **Generate** the summary from only the retrieved text, with instructions to use nothing else and to cite chunk numbers.
+1. The text is extracted with `pypdf` or `python-docx`.
+2. It is split into overlapping chunks, so ideas that cross a boundary stay together.
+3. An embedding model (default suggestion: `nomic-embed-text`) turns each chunk into a vector. Chunks with similar meaning get similar vectors.
+4. For a **focused summary**, your topic is embedded the same way, and the closest chunks are found with a NumPy dot product. The chat model summarises only those chunks and is told to use nothing else.
+5. For a **whole-document summary**, retrieval is not enough, because a summary has to cover the whole text. The app uses **map-reduce** instead: it summarises small groups of chunks, then merges those summaries in groups until one remains.
 
-For whole-document summaries, retrieval alone is not enough, because a summary must cover the whole document and not just the parts closest to one question. That is why those modes use map-reduce or theme clustering.
+The Streamlit page is only the interface. The Python script talks to the Ollama server on your machine (`http://localhost:11434`) to create embeddings and generate text.
 
-## Quick start
+## Requirements
 
-Requires Python 3.10 or newer. Using a virtual environment is recommended:
+- Python 3.10 or newer
+- [Ollama](https://ollama.com) installed and running
+- Enough memory for your chosen model (roughly: 8 GB RAM for a 3B model, 16 GB or more for an 7B to 8B model)
+
+## Setup
 
 ```bash
+# 1. Get the code
 git clone <your-repo-url>
 cd <your-repo-folder>
+
+# 2. Create a virtual environment
 python3 -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-```
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 
-### Option A: Local with Ollama (recommended for private documents)
-
-Nothing is sent over the internet.
-
-```bash
-# 1. Install Ollama from https://ollama.com and open the app
-ollama pull nomic-embed-text      # embedding model
-ollama pull llama3.2:3b           # chat model (use llama3.1:8b if you have 16 GB RAM or more)
-
-# 2. Install dependencies
+# 3. Install Python dependencies
 pip install -r requirements_ollama.txt
 
-# 3a. Web app
+# 4. Start Ollama (open the Ollama app, or run: ollama serve)
+#    then download one embedding model and one chat model
+ollama pull nomic-embed-text       # embedding model (small)
+ollama pull llama3.2:3b            # chat model for ~8 GB RAM
+# ollama pull llama3.1:8b          # better quality if you have 16 GB RAM or more
+```
+
+Check that the models are installed:
+
+```bash
+ollama list
+```
+
+## Run
+
+```bash
 streamlit run app_ollama.py
-
-# 3b. or command line
-python ollama_rag.py path/to/document.pdf
 ```
 
-Command-line options for `ollama_rag.py`:
+Your browser opens at `http://localhost:8501`. If port 8501 is busy, use `streamlit run app_ollama.py --server.port 8502`.
 
-| Option | Default | Purpose |
+## Usage
+
+1. Pick a **chat model** and an **embedding model** in the sidebar.
+2. Upload a document and wait for the "Indexed ..." message.
+3. Choose a summary type:
+   - **Whole document**: choose how many chunks go into each section summary, then click *Summarise document*. A progress bar shows each section as it finishes, and the section summaries can be opened in an expander.
+   - **Focused on a topic**: type a question and click *Summarise topic*. Open *Source chunks used* to check what the answer is based on.
+4. Download the summary with the *Download summary* button.
+
+Whole-document summaries make many model calls (a full book can mean around 45), so they take a while on a laptop. Test with a short file first.
+
+## Settings
+
+| Setting | Range | Effect |
 |---|---|---|
-| `--topic "..."` | none | Focused summary on a topic or question |
-| `--method` | `rag` | Whole-document method: `rag` (themes plus retrieval) or `mapreduce` |
-| `--themes` | automatic | Number of themes for `--method rag` |
-| `--per-theme` | 4 | Chunks retrieved per theme |
-| `--chat-model` | `llama3.2:3b` | Any chat model from `ollama list` |
-| `--embed-model` | `nomic-embed-text` | Embedding model |
-| `--chunk-size`, `--overlap` | 1500, 200 | Characters per chunk and overlap |
-| `--top-k` | 5 | Chunks retrieved for `--topic` |
-| `--out` | none | Also save the summary to a file |
+| Chunk size | 500 to 3000 characters | Larger chunks keep more context but retrieve less precisely |
+| Chunk overlap | 0 to 500 characters | Repeated text between neighbouring chunks, so ideas are not cut in half |
+| Chunks to retrieve | 2 to 10 | How many chunks a focused summary reads |
+| Chunks per section | 1 to 8 | How many chunks go into each section summary (whole document) |
 
-### Option B: Hugging Face Inference API
-
-Needs a [Hugging Face token](https://huggingface.co/settings/tokens) and available Inference Providers credits.
-
-```bash
-pip install -r requirements.txt
-streamlit run app.py
-```
-
-Paste your token into the sidebar and choose a chat model. Model availability and free usage limits change over time, so check the model page on the Hub if you get an error.
-
-### Option C: Local with Hugging Face `transformers`
-
-Runs a small model directly with PyTorch.
-
-```bash
-pip install transformers sentence-transformers pypdf torch accelerate numpy
-python local-rag.py path/to/document.pdf
-```
-
-Models are downloaded from the Hub on first run (a few GB for the generator). Do not use `streamlit run` with this file, because it is a plain script.
+The app sets Ollama's context window to 8,192 tokens for each request, because the default can be too small and silently cut long prompts.
 
 ## Project structure
 
 ```text
 .
-├── app.py                    # Streamlit app using the Hugging Face API
-├── app_ollama.py             # Streamlit app using local Ollama models
-├── ollama_rag.py             # Command-line summariser using Ollama
-├── local-rag.py              # Script using local transformers models
-├── requirements.txt          # Dependencies for app.py
-├── requirements_ollama.txt   # Dependencies for app_ollama.py and ollama_rag.py
+├── app_ollama.py              # the Streamlit app
+├── requirements_ollama.txt    # streamlit, ollama, pypdf, python-docx, numpy
 └── README.md
 ```
 
-## Configuration
-
-- **Hugging Face token**: for `app.py`, type it into the sidebar. For other scripts that download models, you can set `HF_TOKEN` as an environment variable or in a `.env` file (load it with `python-dotenv`). Never commit tokens.
-- **Chunk size and overlap**: larger chunks keep more context but retrieve less precisely.
-- **Model choice**: bigger models write better summaries but need more memory. A 1.5B to 3B model is fine for testing, and 7B to 8B is noticeably better.
-
-## Privacy
-
-| Setup | Where your document goes |
-|---|---|
-| Ollama (`app_ollama.py`, `ollama_rag.py`) | Stays on your machine |
-| `local-rag.py` | Stays on your machine (models are downloaded once) |
-| `app.py` | Every chunk is sent to Hugging Face and to whichever inference provider serves the chat model |
-
-For confidential or regulated documents, use one of the fully local options.
-
 ## Troubleshooting
 
-- **`Could not reach Ollama`**: open the Ollama app or run `ollama serve`, then retry.
-- **No chat or embedding model in the dropdown**: run the `ollama pull` commands above.
-- **`402 Payment Required` (Hugging Face API)**: the monthly free Inference Providers credits are used up. Wait for the reset, add credits, or switch to a local option.
-- **`NoneType has no attribute 'strip'` or empty replies (Hugging Face API)**: reasoning models can spend the whole token budget on hidden thinking. Use a non-reasoning instruct model.
-- **Segmentation fault on macOS**: this can happen when FAISS and PyTorch are loaded together. The local scripts avoid it by using NumPy for search.
-- **`ModuleNotFoundError: docx`**: install `python-docx`, not `docx`.
-- **Scanned PDFs give no text**: the file needs OCR first.
-- **Slow whole-document summaries**: they make many model calls. Use `--method rag` in `ollama_rag.py`, a smaller document, or a faster model.
+| Problem | Fix |
+|---|---|
+| `Could not reach Ollama` | Open the Ollama app or run `ollama serve`, then refresh the page. Check with `curl http://localhost:11434` (it should say "Ollama is running"). |
+| `No embedding model installed` | Run `ollama pull nomic-embed-text`, then refresh the page. |
+| `No chat model installed` | Run `ollama pull llama3.2:3b`, then refresh the page. |
+| A model I installed does not appear | The app sorts models into chat and embedding lists by name. Embedding models are recognised by `embed`, `bge`, `minilm`, `arctic`, `gte` or `e5` in the name. Everything else is treated as a chat model. |
+| Very slow or empty replies | Reasoning models (such as `qwen3` or `deepseek-r1`) spend time and tokens on hidden thinking. Use a standard instruct model such as Llama 3.2 or Qwen2.5. |
+| "No text could be extracted" | The PDF is probably scanned images. It needs OCR first. |
+| `ModuleNotFoundError: docx` | Install `python-docx` (not `docx`). |
+| Slow first request after a pause | Ollama unloads idle models, and the first call reloads them. |
 
 ## Limitations
 
-- Small local models give rough summaries and can omit or invent details. Check important points against the source, and use the `[chunk N]` citations in focused summaries to do so.
-- Whole-document summaries lose detail at each merge or selection step.
-- Text extraction from PDFs with complex layouts, tables or columns may be imperfect.
+- Small local models give rough summaries and can leave out or invent details. Use the source-chunk viewer in focused mode to check claims, and verify anything important against the original.
+- Whole-document summaries lose detail at each merge step.
+- PDFs with complex layouts, columns or tables may extract imperfectly.
+- The index is rebuilt each time you upload a file or change the chunk settings or embedding model. Nothing is saved to disk.
 
 ## License
 
