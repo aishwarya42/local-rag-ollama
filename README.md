@@ -70,6 +70,10 @@ streamlit run app_ollama.py
 ```
 
 Your browser opens at `http://localhost:8501`. If port 8501 is busy, use `streamlit run app_ollama.py --server.port 8502`.
+<img width="1313" height="830" alt="Screenshot 2026-11-18 at 7 37 53 PM" src="https://github.com/user-attachments/assets/ce2e8e70-0bef-4320-bcf9-1d3e356bdd28" />
+<img width="1307" height="832" alt="Screenshot 2026-11-18 at 7 41 30 PM" src="https://github.com/user-attachments/assets/2d93f015-6aa0-4786-aca1-9ee69cfa350a" />
+<img width="1302" height="830" alt="Screenshot 2026-11-18 at 7 41 43 PM" src="https://github.com/user-attachments/assets/4207de71-47dd-419a-a1c2-b247e8604830" />
+
 
 ## Usage
 
